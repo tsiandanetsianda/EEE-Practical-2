@@ -34,6 +34,13 @@ ASM_Main:
 
 @ TODO: Add code, labels and logic for button checks and LED patterns
 
+@ Initialize state variables (only done once at startup)
+	MOVS R3, #1				@ R3: Current increment value (default 1)
+	MOVS R6, #1				@ R6: Current delay mode (1=long/0.7s, 0=short/0.3s)
+	MOVS R7, #0x0F			@ R7: Previous button states (start with all released)
+	MOVS R9, #0				@ R9: Freeze mode (0=normal, 1=SW2, 2=SW3)
+	MOVS R11, #0			@ R11: Combination state tracking
+
 main_loop:
 
 
