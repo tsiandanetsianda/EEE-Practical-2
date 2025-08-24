@@ -42,6 +42,15 @@ ASM_Main:
 	MOVS R11, #0			@ R11: Combination state tracking
 
 
+@ TODO: Add code, labels and logic for button checks and LED patterns
+
+@ Initialize state variables (only done once at startup)
+	MOVS R3, #1				@ R3: Current increment value (default 1)
+	MOVS R6, #1				@ R6: Current delay mode (1=long/0.7s, 0=short/0.3s)
+	MOVS R7, #0x0F			@ R7: Previous button states (start with all released)
+	MOVS R9, #0				@ R9: Freeze mode (0=normal, 1=SW2, 2=SW3)
+	MOVS R11, #0			@ R11: Combination state tracking
+
 main_loop:
 	@ Read current button states with debouncing
 	LDR R0, GPIOA_BASE
@@ -166,6 +175,18 @@ check_sw2_release:
 	
 update_leds:
 	@ Write LED pattern to GPIOB ODR
+	STR R2, [R1, #0x14]		@ Write R2 to GPIOB ODR register
+
+apply_delay:
+	@ Select appropriate delay based on current delay mode (R6)
+	CMP R6, #0				@ Check delay mode: 0=short, 1=long
+	BEQ call_short_delay	@ Branch to short delay if R6=0
+	BL delay_long			@ Call long delay function (0.7s)
+	B main_loop				@ Return to main loop
+	
+call_short_delay:
+	BL delay_short			@ Call short delay function (0.3s)
+	B main_loop				@ Return to main loop
 
 
 write_leds:
