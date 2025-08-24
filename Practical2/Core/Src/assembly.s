@@ -181,8 +181,8 @@ GPIOB_BASE:  		.word 0x48000400
 MODER_OUTPUT: 		.word 0x5555
 
 @ TODO: Add your own values for these delays
-LONG_DELAY_CNT: 	.word 0
-SHORT_DELAY_CNT: 	.word 0
+LONG_DELAY_CNT: 	.word 1866667	@ 0.7 seconds at 8MHz
+SHORT_DELAY_CNT: 	.word 800000	@ 0.3 seconds at 8MHz
 
 @ Delay function for debouncing (short delay)
 delay_short:
