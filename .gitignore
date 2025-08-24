@@ -1,0 +1,26 @@
+# Nested git repositories
+EEE3096S-2025/
+
+# Build artifacts
+Debug/
+*.o
+*.a
+*.elf
+*.bin
+*.hex
+*.map
+
+# IDE files
+*.ioc
+*.launch
+*.cfg
+*.xml
+mx.scratch*
+
+# Compiled files
+*.pyc
+__pycache__/
+
+# OS generated files
+.DS_Store
+Thumbs.db
