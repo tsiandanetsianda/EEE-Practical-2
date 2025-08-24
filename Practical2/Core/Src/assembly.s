@@ -32,18 +32,6 @@ ASM_Main:
 	STR R2, [R1, #0]
 	MOVS R2, #0         	@ NOTE: R2 will be dedicated to holding the value on the LEDs
 
-@ TODO: Add code, labels and logic for button checks and LED patterns
-
-@ Initialize state variables (only done once at startup)
-	MOVS R3, #1				@ R3: Current increment value (default 1)
-	MOVS R6, #1				@ R6: Current delay mode (1=long/0.7s, 0=short/0.3s)
-	MOVS R7, #0x0F			@ R7: Previous button states (start with all released)
-	MOVS R9, #0				@ R9: Freeze mode (0=normal, 1=SW2, 2=SW3)
-	MOVS R11, #0			@ R11: Combination state tracking
-
-
-@ TODO: Add code, labels and logic for button checks and LED patterns
-
 @ Initialize state variables (only done once at startup)
 	MOVS R3, #1				@ R3: Current increment value (default 1)
 	MOVS R6, #1				@ R6: Current delay mode (1=long/0.7s, 0=short/0.3s)
@@ -82,12 +70,18 @@ check_sw2:
 	@ SW2 edge detected - check if press or release
 	MOVS R12, R8
 	ANDS R12, R12, #0x04	@ Check current SW2 state
-	BNE check_sw3			@ SW2 still pressed (0=pressed, so BNE means released)
+	BNE sw2_released		@ SW2 released (0=pressed for active-low)
 	
 	@ SW2 just pressed
 	MOVS R9, #1				@ Set SW2 freeze mode
 	MOVS R2, #0xAA			@ Set LED pattern to 0xAA
-	B update_leds			@ Skip other processing
+	B write_leds			@ Skip other processing
+	
+sw2_released:
+	@ SW2 just released, clear freeze and continue from 0xAA
+	MOVS R9, #0				@ Clear SW2 freeze mode
+	@ R2 keeps current value (0xAA), will increment next iteration
+	B check_sw3
 	
 check_sw3:
 	@ Check SW3 edge (bit 3)
@@ -152,29 +146,14 @@ sw1_released:
 update_pattern:
 	@ Only update LED pattern if not frozen
 	CMP R9, #0
-	BNE update_leds			@ Skip pattern update if frozen
+	BNE write_leds			@ Skip pattern update if frozen
 	
-	@ Check if we're coming out of SW2 freeze
-	CMP R9, #1
-	BEQ check_sw2_release
-	
-normal_increment:
 	@ Normal increment based on current increment value (R3)
 	ADDS R2, R2, R3			@ Add increment value to LED pattern
-	B update_leds
-	
-check_sw2_release:
-	@ Check if SW2 was just released
-	MOVS R12, R8
-	ANDS R12, R12, #0x04	@ Check current SW2 state
-	BEQ update_leds			@ SW2 still pressed, keep 0xAA
-	
-	@ SW2 just released, clear freeze and continue from 0xAA
-	MOVS R9, #0				@ Clear SW2 freeze mode
-	@ R2 already contains 0xAA, will increment next iteration
-	
-update_leds:
+
+write_leds:
 	@ Write LED pattern to GPIOB ODR
+	LDR R1, GPIOB_BASE		@ Reload GPIOB base address
 	STR R2, [R1, #0x14]		@ Write R2 to GPIOB ODR register
 
 apply_delay:
@@ -188,11 +167,6 @@ call_short_delay:
 	BL delay_short			@ Call short delay function (0.3s)
 	B main_loop				@ Return to main loop
 
-
-write_leds:
-	STR R2, [R1, #0x14]
-	B main_loop
-
 @ LITERALS; DO NOT EDIT
 	.align
 RCC_BASE: 			.word 0x40021000
@@ -201,7 +175,7 @@ GPIOA_BASE:  		.word 0x48000000
 GPIOB_BASE:  		.word 0x48000400
 MODER_OUTPUT: 		.word 0x5555
 
-@ TODO: Add your own values for these delays
+@ Delay constant values
 LONG_DELAY_CNT: 	.word 1866667	@ 0.7 seconds at 8MHz
 SHORT_DELAY_CNT: 	.word 800000	@ 0.3 seconds at 8MHz
 
