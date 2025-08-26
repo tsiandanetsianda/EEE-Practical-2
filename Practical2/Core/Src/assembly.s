@@ -34,28 +34,29 @@ ASM_Main:
 
 @ Initialize state variables (only done once at startup)
 	MOVS R3, #1				@ R3: Current increment value (default 1)
-	MOVS R6, #1				@ R6: Current delay mode (1=long/0.7s, 0=short/0.3s)
-	MOVS R7, #0x0F			@ R7: Previous button states (start with all released)
-	MOVS R9, #0				@ R9: Freeze mode (0=normal, 1=SW2, 2=SW3)
-	MOVS R11, #0			@ R11: Combination state tracking
+	MOVS R4, #1				@ R4: Current delay mode (1=long/0.7s, 0=short/0.3s)
+	MOVS R5, #0x0F			@ R5: Previous button states (start with all released)
+	MOVS R6, #0				@ R6: Freeze mode (0=normal, 1=SW2, 2=SW3)
+	MOVS R7, #0				@ R7: Combination state tracking
 
 main_loop:
 	@ Read current button states with debouncing
 	LDR R0, GPIOA_BASE
-	LDR R8, [R0, #0x10]		@ R8: Current button states (raw)
+	LDR R1, [R0, #0x10]		@ R1: Current button states (raw)
 	BL delay_short			@ Debounce delay
-	LDR R8, [R0, #0x10]		@ Re-read after debounce
-	MOVS R12, #0x0F			@ Mask for buttons 0-3
-	ANDS R8, R8, R12		@ R8: Clean button states (bits 0-3 only)
+	LDR R1, [R0, #0x10]		@ Re-read after debounce
+	MOVS R0, #0x0F			@ Mask for buttons 0-3
+	ANDS R1, R1, R0			@ R1: Clean button states (bits 0-3 only)
 	
 	@ Edge detection (XOR previous with current, inverted for active-low)
-	MVNS R10, R7			@ Invert previous (for active-low logic)
-	MVNS R12, R8			@ Invert current (for active-low logic)
-	EORS R10, R10, R12		@ R10: Edge detection (1 = state change)
-	MOVS R7, R8				@ Update previous states
+	MVNS R0, R5				@ Invert previous (for active-low logic)
+	MVNS R1, R1				@ Invert current (for active-low logic)
+	EORS R0, R0, R1			@ R0: Edge detection (1 = state change)
+	MVNS R1, R1				@ Restore current button states
+	MOVS R5, R1				@ Update previous states
 	
 	@ Check if frozen by SW3 - if so, only process SW3 release
-	CMP R9, #2
+	CMP R6, #2
 	BEQ check_sw3_only
 	
 	@ Process button edges in priority order
@@ -63,58 +64,64 @@ main_loop:
 	
 check_sw2:
 	@ Check SW2 edge (bit 2)
-	MOVS R12, R10
-	ANDS R12, R12, #0x04	@ Isolate SW2 edge
+	MOVS R7, R0
+	MOVS R0, #0x04
+	ANDS R7, R7, R0			@ Isolate SW2 edge
 	BEQ check_sw3			@ No SW2 edge, continue
 	
 	@ SW2 edge detected - check if press or release
-	MOVS R12, R8
-	ANDS R12, R12, #0x04	@ Check current SW2 state
+	MOVS R7, R1
+	MOVS R0, #0x04
+	ANDS R7, R7, R0			@ Check current SW2 state
 	BNE sw2_released		@ SW2 released (0=pressed for active-low)
 	
 	@ SW2 just pressed
-	MOVS R9, #1				@ Set SW2 freeze mode
+	MOVS R6, #1				@ Set SW2 freeze mode
 	MOVS R2, #0xAA			@ Set LED pattern to 0xAA
 	B write_leds			@ Skip other processing
 	
 sw2_released:
 	@ SW2 just released, clear freeze and continue from 0xAA
-	MOVS R9, #0				@ Clear SW2 freeze mode
+	MOVS R6, #0				@ Clear SW2 freeze mode
 	@ R2 keeps current value (0xAA), will increment next iteration
 	B check_sw3
 	
 check_sw3:
 	@ Check SW3 edge (bit 3)
-	MOVS R12, R10
-	ANDS R12, R12, #0x08	@ Isolate SW3 edge
+	MOVS R7, R0
+	MOVS R0, #0x08
+	ANDS R7, R7, R0			@ Isolate SW3 edge
 	BEQ check_sw0_sw1		@ No SW3 edge, continue
 	
 	@ SW3 edge detected - check if press or release
-	MOVS R12, R8
-	ANDS R12, R12, #0x08	@ Check current SW3 state
+	MOVS R7, R1
+	MOVS R0, #0x08
+	ANDS R7, R7, R0			@ Check current SW3 state
 	BNE sw3_released		@ SW3 released
 	
 	@ SW3 just pressed
-	MOVS R9, #2				@ Set SW3 freeze mode
+	MOVS R6, #2				@ Set SW3 freeze mode
 	B apply_delay			@ Skip LED update, just delay
 	
 sw3_released:
-	MOVS R9, #0				@ Clear freeze mode
+	MOVS R6, #0				@ Clear freeze mode
 	B check_sw0_sw1			@ Continue to other buttons
 	
 check_sw3_only:
 	@ When frozen by SW3, only check for SW3 release
-	MOVS R12, R10
-	ANDS R12, R12, #0x08	@ Check SW3 edge
+	MOVS R7, R0
+	MOVS R0, #0x08
+	ANDS R7, R7, R0			@ Check SW3 edge
 	BEQ apply_delay			@ No edge, stay frozen
 	
 	@ Check if SW3 released
-	MOVS R12, R8
-	ANDS R12, R12, #0x08	@ Check current SW3 state
+	MOVS R7, R1
+	MOVS R0, #0x08
+	ANDS R7, R7, R0			@ Check current SW3 state
 	BEQ apply_delay			@ Still pressed, stay frozen
 	
 	@ SW3 released
-	MOVS R9, #0				@ Clear freeze mode
+	MOVS R6, #0				@ Clear freeze mode
 	B apply_delay			@ Resume normal operation next iteration
 	
 check_sw0_sw1:
@@ -123,8 +130,9 @@ check_sw0_sw1:
 	@ SW1: changes delay to short (0.3s)
 	
 	@ Check SW0 state (increment control)
-	MOVS R12, R8
-	ANDS R12, R12, #0x01	@ Check SW0 current state
+	MOVS R7, R1
+	MOVS R0, #0x01
+	ANDS R7, R7, R0			@ Check SW0 current state
 	BNE sw0_released		@ SW0 released (0=pressed for active-low)
 	MOVS R3, #2				@ SW0 pressed: increment = 2
 	B check_sw1
@@ -134,18 +142,19 @@ sw0_released:
 	
 check_sw1:
 	@ Check SW1 state (delay control)
-	MOVS R12, R8
-	ANDS R12, R12, #0x02	@ Check SW1 current state
+	MOVS R7, R1
+	MOVS R0, #0x02
+	ANDS R7, R7, R0			@ Check SW1 current state
 	BNE sw1_released		@ SW1 released
-	MOVS R6, #0				@ SW1 pressed: short delay
+	MOVS R4, #0				@ SW1 pressed: short delay
 	B update_pattern
 	
 sw1_released:
-	MOVS R6, #1				@ SW1 released: long delay
+	MOVS R4, #1				@ SW1 released: long delay
 	
 update_pattern:
 	@ Only update LED pattern if not frozen
-	CMP R9, #0
+	CMP R6, #0
 	BNE write_leds			@ Skip pattern update if frozen
 	
 	@ Normal increment based on current increment value (R3)
@@ -157,9 +166,9 @@ write_leds:
 	STR R2, [R1, #0x14]		@ Write R2 to GPIOB ODR register
 
 apply_delay:
-	@ Select appropriate delay based on current delay mode (R6)
-	CMP R6, #0				@ Check delay mode: 0=short, 1=long
-	BEQ call_short_delay	@ Branch to short delay if R6=0
+	@ Select appropriate delay based on current delay mode (R4)
+	CMP R4, #0				@ Check delay mode: 0=short, 1=long
+	BEQ call_short_delay	@ Branch to short delay if R4=0
 	BL delay_long			@ Call long delay function (0.7s)
 	B main_loop				@ Return to main loop
 	
@@ -182,23 +191,21 @@ SHORT_DELAY_CNT: 	.word 800000	@ 0.3 seconds at 8MHz
 @ Delay function for debouncing (short delay)
 delay_short:
 	PUSH {R4, R5}
-	PUSH {R14}
-	LDR R4, SHORT_DELAY_CNT
+	LDR R4, =SHORT_DELAY_CNT
+	LDR R4, [R4]
 delay_short_loop:
 	SUBS R4, R4, #1
 	BNE delay_short_loop
-	POP {R14}
 	POP {R4, R5}
-	BX LR
+	BX lr
 
 @ Delay function for main loop (long delay)
 delay_long:
 	PUSH {R4, R5}
-	PUSH {R14}
-	LDR R4, LONG_DELAY_CNT
+	LDR R4, =LONG_DELAY_CNT
+	LDR R4, [R4]
 delay_long_loop:
 	SUBS R4, R4, #1
 	BNE delay_long_loop
-	POP {R14}
 	POP {R4, R5}
-	BX LR
+	BX lr
