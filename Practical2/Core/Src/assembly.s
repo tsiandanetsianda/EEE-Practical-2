@@ -37,7 +37,6 @@ ASM_Main:
 	MOVS R4, #1				@ R4: Current delay mode (1=long/0.7s, 0=short/0.3s)
 	MOVS R5, #0x0F			@ R5: Previous button states (start with all released)
 	MOVS R6, #0				@ R6: Freeze mode (0=normal, 1=SW2, 2=SW3)
-	MOVS R7, #0				@ R7: Combination state tracking
 
 main_loop:
 	@ Read current button states with debouncing
@@ -50,24 +49,34 @@ main_loop:
 	
 	@ Edge detection (XOR previous with current, inverted for active-low)
 	MVNS R0, R5				@ Invert previous (for active-low logic)
-	MVNS R1, R1				@ Invert current (for active-low logic)
-	EORS R0, R0, R1			@ R0: Edge detection (1 = state change)
-	MVNS R1, R1				@ Restore current button states
-	MOVS R5, R1				@ Update previous states
+	MVNS R7, R1				@ Invert current (for active-low logic)
+	EORS R0, R0, R7			@ R0: Edge detection (1 = state change)
+	MOVS R5, R1				@ Update previous states for next iteration
 	
-	@ Check if frozen by SW3 - if so, only process SW3 release
-	CMP R6, #2
-	BEQ check_sw3_only
+	@ First priority: Check SW3 current state for freeze control
+	@ SW3 freeze works on CURRENT STATE, not edges
+	MOVS R7, R1
+	MOVS R0, #0x08
+	ANDS R7, R7, R0			@ Check current SW3 state
+	BEQ sw3_pressed			@ SW3 pressed (0=pressed for active-low)
 	
-	@ Process button edges in priority order
-	@ Priority: SW2 (pattern) > SW3 (freeze) > SW0/SW1 (increment/delay)
+	@ SW3 not pressed - clear any SW3 freeze
+	CMP R6, #2				@ Check if currently frozen by SW3
+	BNE check_sw2_edge		@ Not SW3 frozen, continue normally
+	MOVS R6, #0				@ Clear SW3 freeze
+	B check_sw2_edge		@ Continue to other button processing
 	
-check_sw2:
-	@ Check SW2 edge (bit 2)
+sw3_pressed:
+	@ SW3 is currently pressed - set freeze mode
+	MOVS R6, #2				@ Set SW3 freeze mode
+	@ Continue to process other buttons but skip pattern update
+	
+check_sw2_edge:
+	@ Check SW2 edge detection for press/release
 	MOVS R7, R0
 	MOVS R0, #0x04
 	ANDS R7, R7, R0			@ Isolate SW2 edge
-	BEQ check_sw3			@ No SW2 edge, continue
+	BEQ check_sw0_sw1		@ No SW2 edge, continue
 	
 	@ SW2 edge detected - check if press or release
 	MOVS R7, R1
@@ -78,56 +87,18 @@ check_sw2:
 	@ SW2 just pressed
 	MOVS R6, #1				@ Set SW2 freeze mode
 	MOVS R2, #0xAA			@ Set LED pattern to 0xAA
-	B write_leds			@ Skip other processing
+	B write_leds			@ Skip other processing, write LEDs immediately
 	
 sw2_released:
-	@ SW2 just released, clear freeze and continue from 0xAA
+	@ SW2 just released - clear SW2 freeze mode
+	CMP R6, #1				@ Check if currently frozen by SW2
+	BNE check_sw0_sw1		@ Not SW2 frozen, continue
 	MOVS R6, #0				@ Clear SW2 freeze mode
 	@ R2 keeps current value (0xAA), will increment next iteration
-	B check_sw3
-	
-check_sw3:
-	@ Check SW3 edge (bit 3)
-	MOVS R7, R0
-	MOVS R0, #0x08
-	ANDS R7, R7, R0			@ Isolate SW3 edge
-	BEQ check_sw0_sw1		@ No SW3 edge, continue
-	
-	@ SW3 edge detected - check if press or release
-	MOVS R7, R1
-	MOVS R0, #0x08
-	ANDS R7, R7, R0			@ Check current SW3 state
-	BNE sw3_released		@ SW3 released
-	
-	@ SW3 just pressed
-	MOVS R6, #2				@ Set SW3 freeze mode
-	B apply_delay			@ Skip LED update, just delay
-	
-sw3_released:
-	MOVS R6, #0				@ Clear freeze mode
-	B check_sw0_sw1			@ Continue to other buttons
-	
-check_sw3_only:
-	@ When frozen by SW3, only check for SW3 release
-	MOVS R7, R0
-	MOVS R0, #0x08
-	ANDS R7, R7, R0			@ Check SW3 edge
-	BEQ apply_delay			@ No edge, stay frozen
-	
-	@ Check if SW3 released
-	MOVS R7, R1
-	MOVS R0, #0x08
-	ANDS R7, R7, R0			@ Check current SW3 state
-	BEQ apply_delay			@ Still pressed, stay frozen
-	
-	@ SW3 released
-	MOVS R6, #0				@ Clear freeze mode
-	B apply_delay			@ Resume normal operation next iteration
 	
 check_sw0_sw1:
-	@ Handle SW0 (increment) and SW1 (delay) - can be pressed together
-	@ SW0: changes increment to 2
-	@ SW1: changes delay to short (0.3s)
+	@ Handle SW0 (increment) and SW1 (delay) - always functional
+	@ These work on CURRENT STATE, not edges
 	
 	@ Check SW0 state (increment control)
 	MOVS R7, R1
@@ -153,16 +124,16 @@ sw1_released:
 	MOVS R4, #1				@ SW1 released: long delay
 	
 update_pattern:
-	@ Only update LED pattern if not frozen
+	@ Only update LED pattern if not frozen by SW2 or SW3
 	CMP R6, #0
-	BNE write_leds			@ Skip pattern update if frozen
+	BNE write_leds			@ Skip pattern update if frozen (R6 != 0)
 	
 	@ Normal increment based on current increment value (R3)
 	ADDS R2, R2, R3			@ Add increment value to LED pattern
 
 write_leds:
 	@ Write LED pattern to GPIOB ODR
-	LDR R1, GPIOB_BASE		@ Reload GPIOB base address
+	LDR R1, GPIOB_BASE		@ Load GPIOB base address
 	STR R2, [R1, #0x14]		@ Write R2 to GPIOB ODR register
 
 apply_delay:
