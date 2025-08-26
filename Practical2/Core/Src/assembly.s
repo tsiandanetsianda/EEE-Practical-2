@@ -51,37 +51,42 @@ main_loop:
 	MVNS R0, R5				@ Invert previous (for active-low logic)
 	MVNS R7, R1				@ Invert current (for active-low logic)
 	EORS R0, R0, R7			@ R0: Edge detection (1 = state change)
+	MOVS R7, R0				@ Save edge detection in R7 before R0 gets overwritten
 	MOVS R5, R1				@ Update previous states for next iteration
 	
 	@ First priority: Check SW3 current state for freeze control
 	@ SW3 freeze works on CURRENT STATE, not edges
-	MOVS R7, R1
-	MOVS R0, #0x08
-	ANDS R7, R7, R0			@ Check current SW3 state
+	MOVS R0, R1				@ Copy current button states to R0
+	MOVS R4, #0x08			@ Temporarily use R4 for mask (will restore delay mode later)
+	ANDS R0, R0, R4			@ Check current SW3 state
 	BEQ sw3_pressed			@ SW3 pressed (0=pressed for active-low)
 	
-	@ SW3 not pressed - clear any SW3 freeze
+	@ SW3 not pressed - clear any SW3 freeze and restore R4
 	CMP R6, #2				@ Check if currently frozen by SW3
-	BNE check_sw2_edge		@ Not SW3 frozen, continue normally
+	BNE restore_r4_check_sw2	@ Not SW3 frozen, continue normally
 	MOVS R6, #0				@ Clear SW3 freeze
-	B check_sw2_edge		@ Continue to other button processing
+	B restore_r4_check_sw2	@ Continue to other button processing
 	
 sw3_pressed:
 	@ SW3 is currently pressed - set freeze mode
 	MOVS R6, #2				@ Set SW3 freeze mode
 	@ Continue to process other buttons but skip pattern update
+
+restore_r4_check_sw2:
+	@ Restore R4 to delay mode (1=long, 0=short) - assume long by default, will be corrected in SW1 check
+	MOVS R4, #1
 	
 check_sw2_edge:
-	@ Check SW2 edge detection for press/release
-	MOVS R7, R0
-	MOVS R0, #0x04
-	ANDS R7, R7, R0			@ Isolate SW2 edge
+	@ Check SW2 edge detection for press/release using saved edge data in R7
+	MOVS R0, R7				@ Restore edge detection data
+	MOVS R7, #0x04			@ SW2 mask
+	ANDS R0, R0, R7			@ Isolate SW2 edge
 	BEQ check_sw0_sw1		@ No SW2 edge, continue
 	
 	@ SW2 edge detected - check if press or release
-	MOVS R7, R1
-	MOVS R0, #0x04
-	ANDS R7, R7, R0			@ Check current SW2 state
+	MOVS R0, R1				@ Copy current button states
+	MOVS R7, #0x04			@ SW2 mask
+	ANDS R0, R0, R7			@ Check current SW2 state
 	BNE sw2_released		@ SW2 released (0=pressed for active-low)
 	
 	@ SW2 just pressed
