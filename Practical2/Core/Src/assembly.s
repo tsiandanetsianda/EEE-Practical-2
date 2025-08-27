@@ -2,8 +2,8 @@
  * assembly.s
  *
  */
-
-@ DO NOT EDIT
+ 
+ @ DO NOT EDIT
 	.syntax unified
     .text
     .global ASM_Main
