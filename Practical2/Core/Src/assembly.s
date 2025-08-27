@@ -54,6 +54,7 @@ main_loop:
 	MOVS R7, R0				@ Save edge detection in R7 before R0 gets overwritten
 	MOVS R5, R1				@ Update previous states for next iteration
 	
+	
 	@ First priority: Check SW3 current state for freeze control
 	@ SW3 freeze works on CURRENT STATE, not edges
 	MOVS R0, R1				@ Copy current button states to R0
@@ -161,8 +162,8 @@ GPIOB_BASE:  		.word 0x48000400
 MODER_OUTPUT: 		.word 0x5555
 
 @ Delay constant values
-LONG_DELAY_CNT: 	.word 1866667	@ 0.7 seconds at 8MHz
-SHORT_DELAY_CNT: 	.word 800000	@ 0.3 seconds at 8MHz
+LONG_DELAY_CNT: 	.word 1000000	@ 0.7 seconds at 8MHz, 0.45
+SHORT_DELAY_CNT: 	.word 433333	@ 0.3 seconds at 8MHz, 0,2
 
 @ Delay function for debouncing (short delay)
 delay_short:
